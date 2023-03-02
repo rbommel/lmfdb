@@ -26,7 +26,10 @@ table.ntdata a {
     <table>
       <tr><td>{{ KNOWL('nf.degree', title="Degree") }}:<td>&nbsp;&nbsp;<td>${{info.degree}}$<td>{{ place_code('degree') }}
       <tr><td>{{ KNOWL('nf.signature', title="Signature") }}:<td>&nbsp;&nbsp;<td>${{info.signature}}$<td>{{ place_code('signature') }}
-       <tr><td>{{ KNOWL('nf.discriminant', title="Discriminant") }}:<td>&nbsp;&nbsp;<td>{{info.discriminant|safe}}<td>{{ place_code('discriminant') }}
+	  {% if nf.is_cm_field() and info.embeddings_string %}
+	  <tr><td>{{ KNOWL('nf.complex_embedding', title="Complex embeddings") }}:<td>&nbsp;&nbsp;<td>${{info.embeddings_string}}$</tr>
+          {% endif %}
+  	  <tr><td>{{ KNOWL('nf.discriminant', title="Discriminant") }}:<td>&nbsp;&nbsp;<td>{{info.discriminant|safe}}<td>{{ place_code('discriminant') }}
        <tr><td>{{ KNOWL('nf.root_discriminant', title="Root discriminant") }}:<td>&nbsp;&nbsp;<td>{{info.rd}}<td>{{ place_code('rd') }}
       <tr><td>{{ KNOWL('nf.ramified_primes', title="Ramified primes") }}:<td>&nbsp;&nbsp;<td>{{info.ram_primes|safe}}<td>{{ place_code('ramified_primes') }}
       <tr><td> $\card{ {{ info.autstring|safe }}(K/\Q) }$:<td>&nbsp;&nbsp;<td>${{info.auts}}$<td>{{ place_code('automorphisms') }}
@@ -56,6 +59,17 @@ table.ntdata a {
           </table>
         </p>
 
+  {% if nf.is_cm_field() and info.embeddings_string %}
+  <h2>{{ KNOWL('nf.reflex_field', title='Reflex field information') }}</h2>
+
+  <table>
+    <tr><th>{{ KNOWL('nf.reflex_field', title='Reflex field') }}<th>{{ KNOWL('nf.complex_embedding', title="Embedding of reflex field") }}<th>{{ KNOWL('nf.reflex_field', title='CM type') }}</tr>
+    {% for row in info.CMtable %}
+    <tr><td align=center>{{row[0] | safe}}<td align=center>${{row[1]}}$<td align=center>${{row[2]}}$</tr>
+    {% endfor %}
+  </table>
+    {% endif %}
+  
 {% if info.degree==1 %}
         <p><h2> {{ KNOWL('nf.integral_basis', title='Integral basis') }} </h2>
 {% endif %}
