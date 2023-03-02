@@ -59,17 +59,6 @@ table.ntdata a {
           </table>
         </p>
 
-  {% if nf.is_cm_field() and info.embeddings_string %}
-  <h2>{{ KNOWL('nf.reflex_field', title='Reflex field information') }}</h2>
-
-  <table>
-    <tr><th>{{ KNOWL('nf.reflex_field', title='Reflex field') }}<th>{{ KNOWL('nf.complex_embedding', title="Embedding of reflex field") }}<th>{{ KNOWL('nf.reflex_field', title='CM type') }}</tr>
-    {% for row in info.CMtable %}
-    <tr><td align=center>{{row[0] | safe}}<td align=center>${{row[1]}}$<td align=center>${{row[2]}}$</tr>
-    {% endfor %}
-  </table>
-    {% endif %}
-  
 {% if info.degree==1 %}
         <p><h2> {{ KNOWL('nf.integral_basis', title='Integral basis') }} </h2>
 {% endif %}
@@ -221,7 +210,24 @@ $\displaystyle\lim_{s\to 1} (s-1)\zeta_K(s) = \frac{2^{r_1}\cdot (2\pi)^{r_2}\cd
     {% endif %}
            </table>
 {% endif %}
-        <p><h2> {{ KNOWL('nf.frobenius_cycle_types', title='Frobenius cycle types') }}</h2>
+
+  {% if nf.is_cm_field() and info.embeddings_string %}
+  <h2>{{ KNOWL('nf.reflex_field', title='CM types and reflex fields') }}</h2>
+
+    <table style="margin-left:5%;">
+    <thead><tr style="border-bottom: 1px solid #000;">
+	<th>{{ KNOWL('nf.reflex_field', title='CM type') }}<th>{{ KNOWL('nf.reflex_field', title='Reflex field') }}<th>{{ KNOWL('nf.complex_embedding', title="Complex embedding of reflex field") }}</tr>
+      </thead>
+    <tbody>
+    {% for row in info.CMtable %}
+    <tr><td align=center>${{row[2]}}$<td align=center>{{row[0] | safe}}<td align=center>${{row[1]}}$</tr>
+    {% endfor %}
+    </tbody>
+  </table>
+    {% endif %}
+  
+
+	<p><h2> {{ KNOWL('nf.frobenius_cycle_types', title='Frobenius cycle types') }}</h2>
            <table class="ntdata" style='text-align: center'>
         <thead>
              <tr><th>$p$</th>

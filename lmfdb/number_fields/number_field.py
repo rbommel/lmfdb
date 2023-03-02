@@ -550,7 +550,7 @@ def render_field_webpage(args):
         for rfdata in reflex_fields_list:
             for cmt in range(len(rfdata[3])):
                 row = [formatfield(rfdata[1], data={'label' : field_labels_dict[tuple(rfdata[1])]})]
-                row.append(latex(CC(rfdata[4][cmt],rfdata[5][cmt])))
+                row.append(latex(CC(rfdata[4][cmt],rfdata[5][cmt])).replace("+","\pm"))
                 row.append(rfdata[3][cmt])
                 CMtable.append(row)
         data['CMtable'] = CMtable
@@ -558,7 +558,7 @@ def render_field_webpage(args):
             data['embeddings'] = [CC(r,i) for r,i in zip(nf._data['embeddings_gen_real'], nf._data['embeddings_gen_imag'])]
         except KeyError:
             data['embeddings'] = []
-        data['embeddings_string'] = ", ".join([latex(z) for z in data['embeddings']])
+        data['embeddings_string'] = ", ".join([latex(z).replace("+","\pm") for z in data['embeddings']])
 
     data['phrase'] = group_phrase(n, t)
     zkraw = nf.zk()
