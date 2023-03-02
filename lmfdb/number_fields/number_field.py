@@ -34,7 +34,7 @@ from lmfdb.galois_groups.transitive_group import (
 from lmfdb.number_fields import nf_page, nf_logger
 from lmfdb.number_fields.web_number_field import (
     field_pretty, WebNumberField, nf_knowl_guts, factor_base_factor,
-    factor_base_factorization_latex, fake_label, formatfield)
+    factor_base_factorization_latex, formatfield)
 
 assert nf_logger
 
@@ -512,7 +512,6 @@ def render_field_webpage(args):
         ram_primes = r'\textrm{None}'
     if nf.is_cm_field():
         # Reflex fields table
-        table = ""
         reflex_fields = db.nf_fields_reflex.search({"nf_label" : label})
         reflex_fields_list = []
         field_labels_dict = dict()
@@ -524,25 +523,20 @@ def render_field_webpage(args):
         field_labels = db.nf_fields.search({"$or":[{"coeffs" : a[1]} for a in reflex_fields_list]}, ["label", "coeffs"])
         for field in field_labels:
             field_labels_dict[tuple(field["coeffs"])] = field["label"]
-        # for reflex_field in reflex_fields_list:
-        #     reflex_field[0] = fake_label(field_labels_dict[tuple(reflex_field[1])], reflex_field[1])
         total = 2 ** (nf.degree()//2 - 1)
         reflex_fields_list.sort()
-        #print(reflex_fields_list)
+        reflex_field_strings = []
         for reflex_field in reflex_fields_list:
-            if table != "":
-                table = table + ', '
-            if field_labels_dict[tuple(reflex_field[1])] == "N/A":
-                table = table + formatfield(reflex_field[1], data={'label' : field_labels_dict[tuple(reflex_field[1])]})
-            else:
-                table = table + formatfield(reflex_field[1], data={'label' : field_labels_dict[tuple(reflex_field[1])]})
+            one_field = formatfield(reflex_field[1], data={'label' : field_labels_dict[tuple(reflex_field[1])]})
+            if 'Q' not in one_field and reflex_field[2]>1:
+                one_field = "".join(["(",one_field,")"])
             if reflex_field[2] > 1:
-                table = table + '$^{' + str(reflex_field[2]) + '}$'
+                one_field = "".join([one_field, '$^{', str(reflex_field[2]), '}$'])
+            reflex_field_strings.append(one_field)
             total = total - reflex_field[2]
-        if total > 0:
-            if table != "":
-                table = table + ', '
-            table = table + 'unavailable$^{' + str(total) + '}$'
+        if total:
+            reflex_field_strings.append('(unavailable)$^{' + str(total) + '}$')
+        table = ", ".join(reflex_field_strings)
         data['reflex_fields'] = table
         CMtable = []
         print(reflex_fields_list)
@@ -550,7 +544,7 @@ def render_field_webpage(args):
         for rfdata in reflex_fields_list:
             for cmt in range(len(rfdata[3])):
                 row = [formatfield(rfdata[1], data={'label' : field_labels_dict[tuple(rfdata[1])]})]
-                row.append(latex(CC(rfdata[4][cmt],rfdata[5][cmt])).replace("+","\pm"))
+                row.append(latex(CC(rfdata[4][cmt],rfdata[5][cmt])).replace("+",r"\pm"))
                 row.append(rfdata[3][cmt])
                 CMtable.append(row)
         data['CMtable'] = CMtable
@@ -558,7 +552,7 @@ def render_field_webpage(args):
             data['embeddings'] = [CC(r,i) for r,i in zip(nf._data['embeddings_gen_real'], nf._data['embeddings_gen_imag'])]
         except KeyError:
             data['embeddings'] = []
-        data['embeddings_string'] = ", ".join([latex(z).replace("+","\pm") for z in data['embeddings']])
+        data['embeddings_string'] = ", ".join([latex(z).replace("+",r"\pm") for z in data['embeddings']])
 
     data['phrase'] = group_phrase(n, t)
     zkraw = nf.zk()
