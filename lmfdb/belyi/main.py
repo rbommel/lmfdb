@@ -521,7 +521,17 @@ class Belyi_download(Downloader):
             s += "X := HyperellipticCurve(S!%s,S!%s);\n" % (curve_polys[0], curve_polys[1])
             s += "// Define the map\n"
             s += "KX<x,y> := FunctionField(X);\n"
-            s += "phi := %s;" % rec["map"]
+            s += "phi := %s;\n" % rec["map"]
+        if rec.get("plane_model"):
+            s += "\n"
+            s += "// Plane model\n"
+            f = rec['plane_model']
+            f = f.replace("x","u") # don't overwrite x
+            s += "R<t,u> := PolynomialRing(K,2);\n"
+            s += "X_plane := Curve(Spec(R), %s);\n" % f
+            s += "KX_plane<t,u> := FunctionField(X_plane);\n"
+            s += "a := %s;\n" % rec['plane_constant']
+            s += "phi_plane := (1/a)*t;"
         else:
             raise NotImplementedError("for genus > 2")
         return self._wrap(s, label, lang=lang)
@@ -545,7 +555,7 @@ class Belyi_download(Downloader):
         if rec["g"] == 0:
             s += "X = ProjectiveSpace(1,K)\n"
             s += "# Define the map\n"
-            s += "K.<x> = FunctionField(K)\n"
+            s += "KX.<x> = FunctionField(K)\n"
             s += "phi = %s" % rec["map"]
         elif rec["g"] == 1:
             s += "S.<x> = PolynomialRing(K)\n"
@@ -572,6 +582,20 @@ class Belyi_download(Downloader):
             s += "R.<y> = PolynomialRing(K0)\n"
             s += "KX.<y> = K0.extension(%s)\n" % crv_str
             s += "phi = %s" % rec["map"]
+        if rec.get("plane_model"):
+            s += "\n"
+            s += "# Plane model\n"
+            f = rec['plane_model']
+            f = f.replace("x","u") # don't overwrite x
+            s += "R.<t,u> = PolynomialRing(K,2)\n"
+            s += "X_plane = Curve(%s)\n" % f
+            s += "K0_plane.<t> = FunctionField(K)\n"
+            s += "R.<u> = PolynomialRing(K0_plane)\n"
+            s += "KX_plane.<u> = K0_plane.extension(%s)\n" % f
+            #s += "KX_plane = X_plane.function_field()\n"
+            #s += "t = KX_plane.base_ring().gens()[0]\n"
+            s += "a = %s\n" % rec['plane_constant']
+            s += "phi_plane = (1/a)*t"
         else:
             raise NotImplementedError("for genus > 2")
         return self._wrap(s, label, lang=lang)
@@ -605,11 +629,11 @@ def belyi_data(label):
     if label.count("-") == 1:  # passport label length
         labels = [label, label]
         label_cols = ["plabel", "plabel"]
-        tables = ["belyi_passports_fixed", "belyi_galmaps"]
+        tables = ["belyi_passports", "belyi_galmaps"]
     elif label.count("-") == 2:  # galmap label length
         labels = [label, "-".join(label.split("-")[:-1]), label]
         label_cols = ["label", "plabel", "label"]
-        tables = ["belyi_galmaps", "belyi_passports_fixed", "belyi_galmap_portraits"]
+        tables = ["belyi_galmaps", "belyi_passports", "belyi_galmap_portraits"]
     else:
         return abort(404, f"Invalid label {label}")
     return datapage(labels, tables, title=f"Belyi map data - {label}", bread=bread, label_cols=label_cols)
@@ -701,8 +725,8 @@ class Belyi_stats(StatsDisplay):
 
     def __init__(self):
         self.ngalmaps = comma(db.belyi_galmaps.stats.count())
-        self.npassports = comma(db.belyi_passports_fixed.stats.count())
-        self.max_deg = comma(db.belyi_passports_fixed.max("deg"))
+        self.npassports = comma(db.belyi_passports.stats.count())
+        self.max_deg = comma(db.belyi_passports.max("deg"))
         self.deg_knowl = display_knowl("belyi.degree", title="degree")
         self.belyi_knowl = '<a title="Belyi maps (up to Galois conjugation) [belyi.galmap]" knowl="belyi.galmap" kwargs="">Belyi maps</a>'
 
@@ -720,11 +744,11 @@ class Belyi_stats(StatsDisplay):
     ]
     stat_list += [
         {"cols": "pass_size",
-         "table": db.belyi_passports_fixed,
+         "table": db.belyi_passports,
          "top_title": [("passport sizes", "belyi.pass_size")],
          "totaler": {"avg": True}},
         {"cols": "num_orbits",
-         "table": db.belyi_passports_fixed,
+         "table": db.belyi_passports,
          "top_title": [("number of Galois orbits", "belyi.num_orbits"), ("per", None), ("passport", "belyi.passport")],
          "totaler": {"avg": True}}
     ]

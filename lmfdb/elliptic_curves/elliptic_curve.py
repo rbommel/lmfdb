@@ -677,7 +677,7 @@ def render_isogeny_class(iso_class):
                            friends=class_data.friends,
                            KNOWL_ID="ec.q.%s"%iso_class,
                            downloads=class_data.downloads,
-                           learnmore=learnmore_list_add(*learnmore_isog_picture))
+                           learnmore=learnmore_list_add(*learnmore_isog_picture) if class_data.class_size > 1 else learnmore_list())
 
 @ec_page.route("/modular_form_display/<label>")
 @ec_page.route("/modular_form_display/<label>/<number>")
@@ -923,8 +923,12 @@ code_names = {'curve': 'Define the curve',
                  'localdata': 'Local data',
                  'galrep': 'mod p Galois image'}
 
-Fullname = {'magma': 'Magma', 'sage': 'SageMath', 'gp': 'Pari/GP', 'oscar': 'Oscar'}
-Comment = {'magma': '//', 'sage': '#', 'gp': '\\\\', 'pari': '\\\\', 'oscar': '#'}
+Fullname = {
+    'magma': 'Magma',
+    'sage': 'SageMath',
+    'gp': 'Pari/GP',
+    'oscar': 'Oscar'
+}
 
 def ec_code(**args):
     label = curve_lmfdb_label(args['conductor'], args['iso'], args['number'])
@@ -937,14 +941,15 @@ def ec_code(**args):
     lang = args['download_type']
     if not lang in Fullname:
         abort(404,"Invalid code language specified: " + lang)
+    name = Fullname[lang]
     if lang=='gp':
         lang = 'pari'
     comment = Ecode.pop('comment').get(lang).strip()
-    code = "%s %s code for working with elliptic curve %s\n\n" % (comment,Fullname[lang],label)
+    code = f"{comment} {name} code for working with elliptic curve {label}\n\n"
     for k in Ecode: # OrderedDict
         if 'comment' not in Ecode[k] or lang not in Ecode[k]:
             continue
-        code += "\n%s %s: \n" % (comment,Ecode[k]['comment'])
+        code += f"\n{comment} {Ecode[k]['comment']}: \n"
         code += Ecode[k][lang] + ('\n' if '\n' not in Ecode[k][lang] else '')
 
     return code
