@@ -518,7 +518,7 @@ def render_field_webpage(args):
         for reflex_field in reflex_fields:
             if len(reflex_field['rf_coeffs']) > 1:
                 reflex_fields_list.append(['', reflex_field['rf_coeffs'], reflex_field['multiplicity'],
-                                           reflex_field.get('CM_types',[]), reflex_field.get('rf_emb_real',[]), reflex_field.get('rf_emb_imag', [])])
+                                           reflex_field.get('CM_types',[]), reflex_field.get('rf_emb_real',[]), reflex_field.get('rf_emb_imag', []), reflex_field.get('rf_rf', []), reflex_field.get('galois_orbits', [])])
                 field_labels_dict[tuple(reflex_field['rf_coeffs'])] = "N/A"
         field_labels = db.nf_fields.search({"$or":[{"coeffs" : a[1]} for a in reflex_fields_list]}, ["label", "coeffs"])
         for field in field_labels:
@@ -539,14 +539,29 @@ def render_field_webpage(args):
         table = ", ".join(reflex_field_strings)
         data['reflex_fields'] = table
         CMtable = []
-        print(reflex_fields_list)
         CC = ComplexField(20)
         for rfdata in reflex_fields_list:
             for cmt in range(len(rfdata[3])):
-                row = [formatfield(rfdata[1], data={'label' : field_labels_dict[tuple(rfdata[1])]})]
+                row = []
+                if field_labels_dict[tuple(rfdata[1])] == 'N/A':
+                    row.append([len(tuple(rfdata[1]))] + list(rfdata[1]))
+                else:
+                    row.append([int(x) for x in field_labels_dict[tuple(rfdata[1])].split('.')])
+                row.append(rfdata[7][cmt])
+                row.append(rfdata[4][cmt])
+                row.append(rfdata[5][cmt])
+                row.append(formatfield(rfdata[1], data={'label' : field_labels_dict[tuple(rfdata[1])]}))
                 row.append(latex(CC(rfdata[4][cmt],rfdata[5][cmt])).replace("+",r"\pm"))
                 row.append(rfdata[3][cmt])
+                rf_rf_label = str(rfdata[6][rfdata[7][cmt]])
+                row.append(formatfield([], data={'label' : rf_rf_label}))
                 CMtable.append(row)
+        CMtable.sort()
+        for i in range(0,len(CMtable)-1):
+            if (i == len(CMtable)-1) or ( (CMtable[i][0] == CMtable[i+1][0]) and (CMtable[i][1] == CMtable[i+1][1]) ):
+                CMtable[i].append(False)
+            else:
+                CMtable[i].append(True)
         data['CMtable'] = CMtable
         try:
             data['embeddings'] = [CC(r,i) for r,i in zip(nf._data['embeddings_gen_real'], nf._data['embeddings_gen_imag'])]
