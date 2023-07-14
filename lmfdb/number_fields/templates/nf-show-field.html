@@ -7,7 +7,23 @@
 table.ntdata a {
   display: inline;
 }
+#table_cm .hidden_row {
+            display: none;
+        }
+#table_cm .shown_row {
+            display: box;
+        }
 </style>
+<script type="text/javascript">
+    function showHideRow(row) {
+        var elems = document.getElementsByClassName(row);
+        for (var i = 0; i < elems.length; i++) {
+            var elem = elems[i];
+            console.log(elem);
+            $(elem).toggle();
+        }
+    }
+</script>
 
 {% set nf = info.wnf %}
 <h2 style="margin-top:0px;"> 
@@ -213,15 +229,15 @@ $\displaystyle\lim_{s\to 1} (s-1)\zeta_K(s) = \frac{2^{r_1}\cdot (2\pi)^{r_2}\cd
 {% endif %}
 
   {% if nf.is_cm_field() and info.embeddings_string %}
-  <h2>{{ KNOWL('nf.reflex_field', title='CM types and reflex fields') }}</h2>
+  <h2>Galois orbits of {{ KNOWL('nf.reflex_field', title='CM types and reflex fields') }}</h2>
 
-    <table style="margin-left:5%;">
+    <table id="table_cm" style="margin-left:5%;">
     <thead><tr style="border-bottom: 1px solid #000;">
-	<th>{{ KNOWL('nf.reflex_field', title='CM type') }}<th>{{ KNOWL('nf.reflex_field', title='Reflex field') }}<th>{{ KNOWL('nf.reflex_reflex_field', title='Reflex reflex field') }}<th>{{ KNOWL('nf.complex_embedding', title="Complex embedding of reflex field") }}</tr>
+	<th>{{ KNOWL('nf.reflex_field', title='CM type') }}<th>{{ KNOWL('nf.reflex_field', title='Reflex field') }}<th>{{ KNOWL('nf.reflex_reflex_field', title='Reflex reflex field') }}<th>{{ KNOWL('nf.complex_embedding', title="Complex embedding of reflex field") }}<th></tr>
       </thead>
     <tbody>
     {% for row in info.CMtable %}
-    <tr><td align=center>${{row[6]}}$<td align=center>{{row[4] | safe}}<td align=center>{{row[7] | safe}}<td align=center>${{row[5]}}$</tr>
+    <tr{% if not(row[9]) %} class="hidden_row {{row[1]}}_{{row[2]}}"{% endif %}><td align=center>${{row[6]}}$<td align=center>{{row[4] | safe}}<td align=center>{{row[7] | safe}}<td align=center>${{row[5]}}${% if row[9] %}<td onclick="showHideRow('hidden_row {{row[1]}}_{{row[2]}}'); showHideRow('shown_row {{row[1]}}_{{row[2]}}');"><a class="shown_row {{row[1]}}_{{row[2]}}">more</a><a class="hidden_row {{row[1]}}_{{row[2]}}">less</a>{% else %}<td>{% endif %}</tr>
         {% if row[8] %}
             <tr style="border-bottom:1px solid #000;"><td colspan="100%"></tr>
         {% endif %}

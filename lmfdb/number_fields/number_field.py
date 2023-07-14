@@ -562,6 +562,11 @@ def render_field_webpage(args):
                 CMtable[i].append(False)
             else:
                 CMtable[i].append(True)
+        for i in range(0,len(CMtable)-1):
+            if (i != 0) and ( (CMtable[i][0] == CMtable[i-1][0]) and (CMtable[i][1] == CMtable[i-1][1]) ):
+                CMtable[i].append(False)
+            else:
+                CMtable[i].append(True)
         data['CMtable'] = CMtable
         try:
             data['embeddings'] = [CC(r,i) for r,i in zip(nf._data['embeddings_gen_real'], nf._data['embeddings_gen_imag'])]
