@@ -1,4 +1,5 @@
 import re
+from flask import url_for
 from urllib.parse import urlencode
 from markupsafe import escape
 from sage.all import (
@@ -68,11 +69,18 @@ def display_knowl(kid, title=None, kwargs={}):
     there will be no edit link for authenticated users.
     """
     from lmfdb.knowledge.knowl import knowl_title
+    from flask_login import current_user
+    from lmfdb.users.pwdmanager import userdb
     ktitle = knowl_title(kid)
     if ktitle is None:
         # Knowl not found
-        if title is None:
-            return """<span class="knowl knowl-error">'%s'</span>""" % kid
+        if current_user.is_authenticated and userdb.can_read_write_userdb():
+            if title is None:
+                return f"""<span class="knowl knowl-error">'{kid}'<a href="{ url_for('knowledge.edit', ID=kid) }">Create it</a>. </span>"""
+            else:
+                return f"""<a href="{ url_for('knowledge.edit', ID=kid) }"><span class="knowl knowl-error">{title}</span></a>"""
+        elif title is None:
+            return f"""<span class="knowl knowl-error">'{kid}'</span>"""
         else:
             return title
     else:
@@ -107,12 +115,19 @@ def web_latex(x, enclose=True):
 
 def compress_int(n, cutoff=15, sides=2):
     res = str(n)
-    if abs(n) >= 10**cutoff:
-        short = res[:sides + (1 if n < 0 else 0)] + r'\!\cdots\!' + res[-sides:]
+    minus_width = 1 if '-' in res else 0
+    if len(res) > cutoff+minus_width:
+        short = res[:sides + minus_width] + r'\!\cdots\!' + res[-sides:]
         return short, True
     else:
         return res, False
 
+def compress_expression(expression, cutoff=15, sides=2):
+    r"""
+    Takes a string and any numbers (consecutive digits) longer than
+    cutoff gets replaced
+    """
+    return re.sub(r'\d+', lambda a: compress_int(str(a.group()),cutoff, sides)[0], expression)
 
 def bigint_knowl(n, cutoff=20, max_width=70, sides=2):
     short, shortened = compress_int(n, cutoff=cutoff, sides=sides)
@@ -202,6 +217,36 @@ def factor_base_factorization_latex(fbf, cutoff=0):
     # get rid of the initial '\cdot '
     ans = ans[6:]
     return '- ' + ans if sign == -1 else ans
+
+def pos_int_and_factor(n, factor_base=None):
+    """
+    Display a positive integer in both decimal and factored for (just
+    decimal if n=1 or n is prime).
+    Also accounts for the possibility that n needs a bigint knowl
+    factor_base is a list of primes containing all primes dividing n
+    (but need not equal that list of primes exactly)
+    """
+    if n == 1:
+        return "$1$"
+    n = ZZ(n)
+    if factor_base:
+        factors = [(p, ZZ(n).valuation(p)) for p in factor_base]
+        factors = [(z[0],z[1]) for z in factors if z[1]>0]
+
+        def power_prime(p, exponent):
+            if exponent == 1:
+                return " " + str(p) + " "
+            else:
+                return " " + str(p) + "^{" + str(exponent) + "}"
+        latexfactors = r" \cdot ".join(power_prime(p, val) for (p, val) in factors)
+    else:
+        factors = n.factor()
+        latexfactors=latex(factors)
+    if len(factors) == 1 and factors[0][1] == 1:
+        return bigint_knowl(n, sides=3)
+    else:
+        return bigint_knowl(n, sides=3) + rf"\(\medspace =  {latexfactors} \)"
+
 
 def polyquo_knowl(f, disc=None, unit=1, cutoff=None):
     quo = "x^{%s}" % (len(f) - 1)
@@ -744,11 +789,75 @@ def sparse_cyclotomic_to_latex(n, dat):
             ans += '-'  + zpart
         else:
             ans += '{:+d}'.format(p[0])  + zpart
-    ans= re.compile(r'^\+').sub('', ans)
+    ans = ans.lstrip("+")
     if ans == '':
         return '0'
     return ans
 
+def sparse_cyclotomic_to_mathml(n, dat):
+    r"""
+    Take an element of Q(zeta_n) given in the form [[c1,e1],[c2,e2],...]
+    and return sum_{j=1}^k cj zeta_n^ej in mathml form as it is given
+    (converting to sage will rewrite the element in terms of a basis)
+    """
+    dat.sort(key=lambda p: p[1])
+    minus = "<mo>&#x02212;</mo>"
+    plus = "<mo>&#x0002B;</mo>"
+    if n == 4:
+        zeta = "<mi>i</mi>"
+    elif n < 10: # will be wrapped in <msub> or <msubsup> below
+        zeta = f"<mi>&#x003B6;</mi><mn>{n}</mn>"
+    else:
+        zeta = f"<mi>&#x003B6;</mi><mrow><mn>{n}</mn></mrow>"
+
+    def zetapow(k):
+        if k == 0:
+            return "<mn>1</mn>"
+        elif n == 4:
+            assert k == 1
+            return zeta
+        if k == 1:
+            return f"<msub>{zeta}</msub>"
+        if 1 < k < 10:
+            return f"<msubsup>{zeta}<mn>{k}</mn></msubsup>"
+        if k < 0:
+            return f"<msubsup>{zeta}<mrow>{minus}<mn>{-k}</mn></mrow></msubsup>"
+        return f"<msubsup>{zeta}<mrow><mn>{k}</mn></mrow></msubsup>"
+    ans = ''
+    for c, e in dat:
+        if c == 0:
+            continue
+        if e == 0:
+            if c == 1 or c == -1:
+                zpart = "<mn>1</mn>"
+            else:
+                zpart = ""
+        else:
+            zpart = zetapow(e)
+
+        # Now the coefficient
+        if c == 1:
+            ans += plus + zpart
+        elif c == -1:
+            ans += minus + zpart
+        elif c > 0:
+            ans += plus + f"<mn>{c}</mn>" + zpart
+        else:
+            ans += minus + f"<mn>{-c}</mn>" + zpart
+    if ans.startswith(plus):
+        ans = ans[len(plus):]
+    if not ans:
+        ans = "<mn>0</mn>"
+
+    # We omit xmlns="http://www.w3.org/1998/Math/MathML" since rendering seems to work without it, and we have a bunch of math tags
+    return f'<math display="inline"><mrow>{ans}</mrow></math>'
+
+def integer_to_mathml(n):
+    if n >= 0:
+        n = f"<mn>{n}</mn>"
+    else:
+        n = f"<mo>&#x02212;</mo><mn>{-n}</mn>"
+    return f'<math display="inline"><mrow>{n}</mrow></math>'
 
 def dispZmat(mat):
     r""" Display a matrix with integer entries
@@ -771,7 +880,7 @@ def dispcyclomat(n, mat):
 
 
 def list_to_latex_matrix(li):
-    """
+    r"""
     Given a list of lists representing a matrix, output a latex representation
     of that matrix as a string.
 
@@ -791,7 +900,5 @@ def dispZmat_from_list(a_list, dim):
     """
     num_entries = len(a_list)
     assert num_entries == dim ** 2
-    output = []
-    for i in range(0,dim**2,dim):
-        output.append(a_list[i:i+dim])
+    output = [a_list[i:i + dim] for i in range(0, dim**2, dim)]
     return matrix(output)

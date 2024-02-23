@@ -175,7 +175,7 @@ def prime_from_label(K, lab):
     make_keys(K,p)
     d = K.psort_dict[p]
     try:
-        return next((P for P in d if d[P][:2]==(n,j)))
+        return next(P for P in d if d[P][:2]==(n,j))
     except StopIteration:
         return 0
 
@@ -289,7 +289,7 @@ def ppower_norm_ideals(K,p,f):
     make_keys(K,p)
     if not hasattr(K,'ppower_dict'):
         K.ppower_dict = {}
-    if not (p,f) in K.ppower_dict:
+    if (p,f) not in K.ppower_dict:
         PP = K.primes_dict[p]
         # These vectors are sorted, first by unweighted weight (sum of
         # values) then lexicographically with the reverse ordering on Z:
@@ -379,5 +379,4 @@ def ideals_iterator(K,minnorm=1,maxnorm=Infinity):
     r""" Return an iterator over all ideals of norm n up to maxnorm (sorted).
     """
     for n in srange(minnorm,maxnorm+1):
-        for I in ideals_of_norm(K,n):
-            yield I
+        yield from ideals_of_norm(K,n)

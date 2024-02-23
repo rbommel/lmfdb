@@ -3,6 +3,7 @@ import csv
 import os
 import tempfile
 import time
+import re
 
 from psycopg2.sql import SQL, Identifier, Placeholder, Literal
 
@@ -29,7 +30,7 @@ _operator_classes = {
         "varchar_ops",
         "varchar_pattern_ops",
     ],
-    "gin": ["jsonb_path_ops"],
+    "gin": ["jsonb_path_ops", "array_ops"],
     "gist": ["inet_ops"],
     "hash": [
         "bpchar_pattern_ops",
@@ -275,8 +276,14 @@ class PostgresTable(PostgresBase):
         if not verbose:
             return output
 
-    @staticmethod
-    def _create_index_statement(name, table, type, columns, modifiers, storage_params):
+    def _get_tablespace(self):
+        """
+        Determine the tablespace hosting this table (which is then used for indexes and constraints)
+        """
+        cur = self._execute(SQL("SELECT tablespace FROM pg_tables WHERE tablename=%s"), [self.search_table])
+        return cur.fetchone()[0]
+
+    def _create_index_statement(self, name, table, type, columns, modifiers, storage_params):
         """
         Utility function for making the create index SQL statement.
         """
@@ -290,6 +297,7 @@ class PostgresTable(PostgresBase):
             )
         else:
             storage_params = SQL("")
+        tablespace = self._tablespace_clause()
         modifiers = [" " + " ".join(mods) if mods else "" for mods in modifiers]
         # The inner % operator is on strings prior to being wrapped by SQL: modifiers have been whitelisted.
         columns = SQL(", ").join(
@@ -297,8 +305,8 @@ class PostgresTable(PostgresBase):
             for col, mods in zip(columns, modifiers)
         )
         # The inner % operator is on strings prior to being wrapped by SQL: type has been whitelisted.
-        creator = SQL("CREATE INDEX {0} ON {1} USING %s ({2}){3}" % (type))
-        return creator.format(Identifier(name), Identifier(table), columns, storage_params)
+        creator = SQL("CREATE INDEX {0} ON {1} USING %s ({2}){3}{4}" % (type))
+        return creator.format(Identifier(name), Identifier(table), columns, storage_params, tablespace)
 
     def _create_counts_indexes(self, suffix="", warning_only=False):
         """
@@ -446,6 +454,13 @@ class PostgresTable(PostgresBase):
                 name = "_".join([self.search_table] + [col[:2] for col in columns])
             else:
                 name = "_".join([self.search_table] + ["".join(col[0] for col in columns)])
+            if len(name) >= 64:
+                name = name[:63]
+            if self._relation_exists(name):
+                disamb = 0
+                while self._relation_exists(name + str(disamb)):
+                    disamb += 1
+                name += str(disamb)
 
         with DelayCommit(self, silence=True):
             self._check_index_name(name, "Index")
@@ -976,14 +991,14 @@ class PostgresTable(PostgresBase):
         start = time.time()
         count = 0
         tot = self.count(query)
-        sep = kwds.get("sep", u"|")
+        sep = kwds.get("sep", "|")
         try:
             with datafile:
                 # write headers
-                datafile.write(sep.join(data_cols) + u"\n")
+                datafile.write(sep.join(data_cols) + "\n")
                 datafile.write(
                     sep.join(self.col_type.get(col) for col in data_cols)
-                    + u"\n\n"
+                    + "\n\n"
                 )
 
                 for rec in self.search(query, projection=projection, sort=[]):
@@ -993,7 +1008,7 @@ class PostgresTable(PostgresBase):
                             tostr_func(processed.get(col), self.col_type[col])
                             for col in data_cols
                         )
-                        + u"\n"
+                        + "\n"
                     )
                     count += 1
                     if (count % progress_count) == 0:
@@ -1044,7 +1059,7 @@ class PostgresTable(PostgresBase):
         - ``kwds`` -- passed on to psycopg2's ``copy_from``.  Cannot include "columns".
         """
         self._check_locks()
-        sep = kwds.get("sep", u"|")
+        sep = kwds.get("sep", "|")
         print("Updating %s from %s..." % (self.search_table, datafile))
         now = time.time()
         if label_col is None:
@@ -1053,7 +1068,7 @@ class PostgresTable(PostgresBase):
                 raise ValueError("You must specify a column that is contained in the datafile and uniquely specifies each row")
         with open(datafile) as F:
             tables = [self.search_table]
-            columns = self.search_cols
+            columns = list(self.search_cols)
             if self.extra_table is not None:
                 tables.append(self.extra_table)
                 columns.extend(self.extra_cols)
@@ -1079,7 +1094,7 @@ class PostgresTable(PostgresBase):
                 SQL("{0} " + self.col_type[col]).format(Identifier(col))
                 for col in columns
             ])
-            creator = SQL("CREATE TABLE {0} ({1})").format(Identifier(tmp_table), processed_columns)
+            creator = SQL("CREATE TABLE {0} ({1}){2}").format(Identifier(tmp_table), processed_columns, self._tablespace_clause())
             self._execute(creator)
             # We need to add an id column and populate it correctly
             if label_col != "id":
@@ -1141,7 +1156,7 @@ class PostgresTable(PostgresBase):
                 ordered = False
             if etable is not None:
                 ecols = SQL(", ").join([
-                    SQL("{0} = {1}.{0}").format(col, Identifier(tmp_table))
+                    SQL("{0} = {1}.{0}").format(Identifier(col), Identifier(tmp_table))
                     for col in ecols
                 ])
                 self._execute(updater.format(
@@ -1156,6 +1171,7 @@ class PostgresTable(PostgresBase):
                         if not self._table_exists(table + "_tmp"):
                             self._clone(table, table + "_tmp")
                 self.stats.refresh_stats(suffix=suffix)
+                self.stats.refresh_null_counts(suffix=suffix)
             if not inplace:
                 swapped_tables = (
                     [self.search_table]
@@ -1525,7 +1541,7 @@ class PostgresTable(PostgresBase):
             self._id_ordered = True
             self._out_of_order = False
 
-    def _write_header_lines(self, F, cols, sep=u"|", include_id=True):
+    def _write_header_lines(self, F, cols, sep="|", include_id=True):
         """
         Writes the header lines to a file
         (row of column names, row of column types, blank line).
@@ -1656,7 +1672,7 @@ class PostgresTable(PostgresBase):
             If the search and extra files contain ids, they should be contiguous,
             starting at 1.
         """
-        sep = kwds.get("sep", u"|")
+        sep = kwds.get("sep", "|")
         suffix = "_tmp"
         if restat is None:
             restat = countsfile is None or statsfile is None
@@ -1912,34 +1928,30 @@ class PostgresTable(PostgresBase):
         """
         to_remove = []
         to_swap = []
+        tablenames = [name for name in self._all_tablenames() if name.startswith(self.search_table)]
         for suffix in ["", "_extras", "_stats", "_counts"]:
             head = self.search_table + suffix
             tablename = head + "_tmp"
-            if self._table_exists(tablename):
+            if tablename in tablenames:
                 to_remove.append(tablename)
-            backup_number = 1
-            tails = []
-            while True:
-                tail = "_old{0}".format(backup_number)
-                tablename = head + tail
-                if self._table_exists(tablename):
-                    tails.append(tail)
-                else:
-                    break
-                backup_number += 1
+            olds = []
+            for name in tablenames:
+                m = re.fullmatch(head + r"_old(\d+)", name)
+                if m:
+                    olds.append(int(m.group(1)))
+            olds.sort()
             if keep_old > 0:
-                for new_number, tail in enumerate(tails[-keep_old:], 1):
-                    newtail = "_old{0}".format(new_number)
-                    if newtail != tail:  # we might be keeping everything
-                        to_swap.append((head, tail, newtail))
-                tails = tails[:-keep_old]
-            to_remove.extend([head + tail for tail in tails])
+                for new_number, n in enumerate(olds[-keep_old:], 1):
+                    if n != new_number:
+                        to_swap.append((head, n, new_number))
+                olds = olds[:-keep_old]
+            to_remove.extend([head + f"_old{n}" for n in olds])
         with DelayCommit(self, silence=True):
             for table in to_remove:
                 self._execute(SQL("DROP TABLE {0}").format(Identifier(table)))
                 print("Dropped {0}".format(table))
             for head, cur_tail, new_tail in to_swap:
-                self._swap([head], cur_tail, new_tail)
+                self._swap([head], f"_old{cur_tail}", f"_old{new_tail}")
                 print("Swapped {0} to {1}".format(head + cur_tail, head + new_tail))
 
     def max_id(self, table=None):
@@ -2063,7 +2075,7 @@ class PostgresTable(PostgresBase):
         - ``kwds`` -- passed on to psycopg2's ``copy_to``.  Cannot include "columns".
         """
         self._check_file_input(searchfile, extrafile, kwds)
-        sep = kwds.pop("sep", u"|")
+        sep = kwds.pop("sep", "|")
 
         search_cols = [col for col in self.search_cols if columns is None or col in columns]
         extra_cols = [col for col in self.extra_cols if columns is None or col in columns]
@@ -2437,7 +2449,7 @@ class PostgresTable(PostgresBase):
             col_type_SQL = SQL(", ").join(
                 SQL("{0} %s" % typ).format(Identifier(col)) for col, typ in col_type
             )
-            creator = SQL("CREATE TABLE {0} ({1})").format(Identifier(self.extra_table), col_type_SQL)
+            creator = SQL("CREATE TABLE {0} ({1}){2}").format(Identifier(self.extra_table), col_type_SQL, self._tablespace_clause())
             self._execute(creator)
             if columns:
                 self.drop_constraints(columns)

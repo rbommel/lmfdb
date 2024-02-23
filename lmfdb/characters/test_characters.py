@@ -2,6 +2,7 @@
 from lmfdb.tests import LmfdbTest
 from lmfdb.characters.web_character import WebDirichlet, parity_string, bool_string
 from lmfdb.lfunctions.LfunctionDatabase import get_lfunction_by_url
+from lmfdb.utils import comma
 
 
 class WebCharacterTest(LmfdbTest):
@@ -15,6 +16,12 @@ class WebCharacterTest(LmfdbTest):
 
 
 class DirichletSearchTest(LmfdbTest):
+    def test_nchars(self):
+        from lmfdb import db
+        nchars = db.char_orbits.sum_column('degree')
+        assert nchars == 3039650754 # if this fails, one also needs to update DirichStats.__init__
+        W = self.tc.get('/Character/Dirichlet/')
+        assert comma(nchars) in W.get_data(as_text=True)
 
     def test_order(self):
         W = self.tc.get('/Character/Dirichlet/?order=19-23')
@@ -142,8 +149,15 @@ class DirichletCharactersTest(LmfdbTest):
         W = self.tc.get('/Character/Dirichlet/9999999999/banana', follow_redirects=True)
         assert 'Error: Galois orbits have only been computed for modulus up to 100,000' in W.get_data(as_text=True)
 
+        W = self.tc.get('/Character/Dirichlet/58589/50021', follow_redirects=True)
+        assert 'Number field defined by a degree 1428 polynomial' in W.get_data(as_text=True)
+
     def test_dirichletchar11(self):
         W = self.tc.get('/Character/Dirichlet/1/1')
+        assert '/NumberField/1.1.1.1' in W.get_data(as_text=True)
+
+    def test_dirichletchar21(self):
+        W = self.tc.get('/Character/Dirichlet/2/1')
         assert '/NumberField/1.1.1.1' in W.get_data(as_text=True)
 
     def test_valuefield(self):
